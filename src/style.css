@@ -31,8 +31,7 @@ button:disabled { opacity: 0.35; cursor: default; }
 }
 .brand { display: flex; align-items: center; gap: 8px; font-size: 18px; letter-spacing: 0.3px; margin-right: auto; }
 .brand b { color: var(--gold); font-weight: 700; }
-.logo { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px;
-  background: linear-gradient(145deg, #3b2616, #1a0f08); border: 1px solid #5a3b22; font-size: 20px; }
+.logo { width: 32px; height: 32px; display: block; }
 .score-pill {
   display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 999px;
   background: var(--panel); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);

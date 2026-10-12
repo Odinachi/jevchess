@@ -14,7 +14,7 @@ const VALUE = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
 document.querySelector('#app').innerHTML = `
   <div id="stage"></div>
   <header class="topbar">
-    <div class="brand"><span class="logo">♞</span><span>Jev<b>Chess</b></span></div>
+    <div class="brand"><img class="logo" src="/favicon.svg" alt="" /><span>Jev<b>Chess</b></span></div>
     <button class="score-pill" id="scorePill" title="Session score">
       <span>You <b id="sYou">0</b></span><span class="sep">–</span><span><b id="sJev">0</b> Jev</span>
       <span class="draws">½ <b id="sDraw">0</b></span>
