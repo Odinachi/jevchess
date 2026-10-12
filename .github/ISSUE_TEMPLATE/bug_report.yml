@@ -1,0 +1,32 @@
+name: 🐞 Bug report
+description: Something isn't working
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to report this! Please never paste API keys here.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: Jev's badge
+      options: [TYPESAFE, LOCAL, Not sure]
+  - type: input
+    id: device
+    attributes:
+      label: Device / OS / browser
+      placeholder: e.g. iPhone 15, iOS 19, Safari
+    validations:
+      required: true
+  - type: textarea
+    id: moves
+    attributes:
+      label: Move list (if game-related)
+      description: Open the Moves panel and copy it here.
+      render: text

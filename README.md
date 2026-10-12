@@ -11,13 +11,15 @@ Realistic, mobile-friendly **3D chess in the browser** — play against **[TypeS
 
 All 3D assets are generated in code — nothing to download.
 
+> **New here? You're welcome to contribute!** Whether it's your first open-source PR or your hundredth, there's a place for you. Jump to [Contributing](#contributing) 👋
+
 ## Quick start
 
 ```bash
 npm install
 cp .env.example .env.local   # add your TYPESAFE_API_KEY (optional)
 npm run dev                  # http://localhost:5173
-npm test                     # engine + TypeSafe integration tests
+npm test                     # 82 tests, no API key or network needed
 npm run build
 ```
 
@@ -83,12 +85,42 @@ src/
   ui/              confetti, sound, scoreboard
 server/            TypeSafe Jev bridge (holds the API key)
 api/               Vercel Function entry (/api/jev)
-test/              node:test tests (engine, TypeSafe request shape with a mocked API)
+test/              node:test suites (see below)
 ```
+
+## Tests
+
+`npm test` runs everything with Node's built-in test runner. The TypeSafe API is mocked, so the suite needs no API key, network or browser.
+
+| Suite | Covers |
+| --- | --- |
+| `engine.test.js` | Perft move-generation counts on 5 standard positions, plus mate finding |
+| `engine-edge.test.js` | Make/unmake + hash round-trips, castling through/out of check, pinned en passant, mate vs stalemate, only-move positions, repetition draws, shortlist verification |
+| `server.test.js` | Missing key, bad input, mated/stalemated positions, check evasions, special-move descriptions, the 218-move position, hallucinated or partial answers, upstream errors and retries, rate limiting |
+| `client.test.js` | Difficulty policies at the edges, commentary text, `/api/jev` client errors and timeouts |
+| `score.test.js` | Score persistence, history cap, corrupted data, private-mode storage |
+| `typesafe.test.js` | End-to-end request shape sent to TypeSafe |
 
 ## Contributing
 
-PRs welcome! Please run `npm test` before submitting. Ideas: piece set themes, drag‑to‑move, PGN export, stronger evaluation, an opening explorer.
+**Contributions of every size are welcome**, from fixing a typo to tuning Jev's chess strength. If you're new to open source, this is a friendly place to start. Nobody expects a perfect first PR, and maintainers are happy to help you get it over the line.
+
+1. Read **[CONTRIBUTING.md](CONTRIBUTING.md)**. It takes about 2 minutes.
+2. Pick something: look for issues labelled **`good first issue`** or **`help wanted`**, or try one of the ideas below.
+3. Fork, branch, `npm install`, and `npm test`. You don't need a TypeSafe key to work on anything except live TypeSafe calls.
+4. Open a pull request. Draft PRs and questions are welcome too.
+
+**Ideas we'd love help with**
+
+| Area | Ideas |
+| --- | --- |
+| 🎨 3D & visuals | Alternative piece sets and board themes, a better knight model, a captured-piece tray, reduced-motion mode |
+| 🕹️ Gameplay | Drag-to-move, premoves, move clocks, PGN import/export, a hint button, replay mode |
+| 🧠 Jev | Better `state` prompts for TypeSafe Jev, smarter difficulty policies, a stronger local evaluation, opening book growth |
+| ♿ Accessibility | Keyboard play, screen-reader move announcements, colour-blind highlights |
+| 🌍 Everything else | Translations, docs, tests, performance on low-end phones |
+
+Found a bug or have an idea? [Open an issue](../../issues/new/choose). Please follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
