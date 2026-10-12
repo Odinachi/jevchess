@@ -193,7 +193,9 @@ async function playMove(mv) {
   state.selected = null;
   state.busy = true;
   world.setHighlights({ lastMove: [m.from, m.to] });
+  const token = state.thinkId;
   await world.animateMove(m);
+  if (token !== state.thinkId) return; // undone or new game while the piece was moving
   afterMove(m);
   if (!checkGameOver()) askJev();
 }

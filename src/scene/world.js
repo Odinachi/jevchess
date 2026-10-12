@@ -283,8 +283,13 @@ export class World {
       g.position.y = BOARD_TOP + Math.sin(Math.PI * k) * lift;
     }));
 
+    // The captured piece flies off in the background so the move resolves (and the
+    // capture sound plays) the moment the capturing piece lands.
+    // It joins the graveyard right away so an undo / new game mid-flight cleans it up.
     if (victim) {
-      jobs.push(new Promise((res) => setTimeout(res, dur * 0.7)).then(() => this.removeCaptured(victim)));
+      (this.graveyard ||= []).push(victim);
+      const gen = this.captureGen;
+      setTimeout(() => { if (gen === this.captureGen) this.removeCaptured(victim); }, dur * 0.7);
     }
 
     // Castling: move the rook too.
@@ -327,7 +332,6 @@ export class World {
       0,
       side * (3.5 - (i % 8)),
     );
-    (this.graveyard ||= []).push(victim);
     return this.tween(520, (k) => {
       victim.position.lerpVectors(start, dest, k);
       victim.position.y = THREE.MathUtils.lerp(start.y, 0, k) + Math.sin(Math.PI * k) * 1.2;
@@ -341,6 +345,7 @@ export class World {
 
   /** Rebuild captured graveyards from lists of piece types. */
   setCaptured(list) {
+    this.captureGen = (this.captureGen || 0) + 1; // cancels captures still waiting to fly
     this.graveyard?.forEach((g) => this.scene.remove(g));
     this.graveyard = [];
     this.clearCaptured();
