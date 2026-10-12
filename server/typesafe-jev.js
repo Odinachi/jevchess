@@ -103,6 +103,7 @@ export async function decide(body) {
       const m = byUci.get(k);
       return { uci: k, san: m.san, from: m.from, to: m.to, promotion: m.promotion, p };
     });
+  if (!ranked.length) return { status: 502, json: { error: 'TypeSafe Jev returned no legal moves' } };
 
   return {
     status: 200,
