@@ -45,7 +45,7 @@ export function applyPolicy(ranked, level, rand = Math.random) {
   if (level === 'beginner') {
     const pool = ranked.slice(0, 8);
     const T = 2.2;
-    const w = pool.map((m) => Math.pow(Math.max(m.p, 1e-6), 1 / T));
+    const w = pool.map((m) => Math.pow(Math.max(Number(m.p) || 0, 1e-6), 1 / T));
     const total = w.reduce((a, b) => a + b, 0);
     let x = rand() * total;
     for (let i = 0; i < pool.length; i++) if ((x -= w[i]) <= 0) return { pick: pool[i] };
