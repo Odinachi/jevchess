@@ -200,8 +200,9 @@ export class World {
     // Fit the whole board horizontally on narrow (portrait) screens.
     const vFov = THREE.MathUtils.degToRad(this.camera.fov);
     const hFov = 2 * Math.atan(Math.tan(vFov / 2) * this.camera.aspect);
-    const need = BOARD_SIZE * 0.56 / Math.tan(Math.min(hFov, vFov * 1.05) / 2);
-    this.fitDistance = Math.max(11.5, need);
+    const needW = (BOARD_SIZE * 0.56) / Math.tan(hFov / 2);
+    const needH = (BOARD_SIZE * 0.68) / Math.tan(vFov / 2);
+    this.fitDistance = Math.max(11.5, needW, needH);
     this.controls.minDistance = this.fitDistance * 0.55;
     this.controls.maxDistance = this.fitDistance * 1.6;
     this.scene.fog.near = this.fitDistance * 1.4;
