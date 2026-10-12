@@ -53,6 +53,13 @@ If the API is unreachable or times out, the game falls back to the local engine 
 
 Deploy to Vercel, then set `TYPESAFE_API_KEY` in the project's environment variables (for example with `vercel env add TYPESAFE_API_KEY`). Other hosts need to serve `POST /api/jev` with `server/typesafe-jev.js`.
 
+- **Analytics:** Vercel Web Analytics is built in. Enable it under **Analytics** in the Vercel dashboard. It records page views, plus `game_start` / `game_end` custom events, which need a Pro plan.
+- **Social previews:** the Open Graph and Twitter cards need absolute URLs, which are filled in at build time. On Vercel they're detected automatically. Set `SITE_URL` if you use a custom domain.
+
+## Brand images
+
+The favicon (`public/favicon.svg`) is the source of truth. `npm run images` regenerates the PNG app icons and the 1200×630 social card (`public/og-image.jpg`) from code in [`scripts/generate-images.mjs`](scripts/generate-images.mjs).
+
 ## Local engine (fallback & verifier)
 
 It lives in [`src/jev/`](src/jev) and runs in a Web Worker so the UI never freezes.
@@ -83,6 +90,8 @@ src/
   jev/             TypeSafe Jev client + local engine (fast board, worker)
   scene/           three.js world: board, pieces, lighting, animation, picking
   ui/              confetti, sound, scoreboard
+public/            favicon, app icons, web manifest, social card
+scripts/           image generator (npm run images)
 server/            TypeSafe Jev bridge (holds the API key)
 api/               Vercel Function entry (/api/jev)
 test/              node:test suites (see below)
