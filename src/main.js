@@ -6,6 +6,10 @@ import { typesafeEnabled, askTypeSafeJev, applyPolicy, typesafeThought } from '.
 import { confetti } from './ui/confetti.js';
 import { sound } from './ui/sound.js';
 import { scoreboard } from './ui/score.js';
+import { inject, track } from '@vercel/analytics';
+
+// Vercel Web Analytics: page views, plus game events (custom events need a Pro plan).
+inject({ mode: import.meta.env.PROD ? 'production' : 'development', debug: false });
 
 const $ = (s) => document.querySelector(s);
 const GLYPH = { w: { k: '♔', q: '♕', r: '♖', b: '♗', n: '♘', p: '♙' }, b: { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' } };
@@ -299,6 +303,7 @@ function finish(winner, title, sub, icon, mate) {
   state.over = true;
   state.thinkId++;
   scoreboard.record(winner, { level: state.level, color: state.player, moves: chess.history().length });
+  track('game_end', { result: winner, reason: mate ? 'checkmate' : title, level: state.level, moves: chess.history().length });
   renderScore();
   sound.end();
   $('#resultIcon').textContent = icon;
@@ -362,6 +367,7 @@ function newGame() {
   hide('#setupModal'); hide('#overModal');
   const choice = state.colorChoice;
   state.player = choice === 'r' ? (Math.random() < 0.5 ? 'w' : 'b') : choice;
+  track('game_start', { level: state.level, color: state.player });
   chess.reset();
   state.selected = null;
   state.over = false;
