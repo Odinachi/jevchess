@@ -2,6 +2,7 @@ import './style.css';
 import { Chess } from 'chess.js';
 import { World } from './scene/world.js';
 import { LEVELS } from './jev/engine.js';
+import { typesafeEnabled, askTypeSafeJev, applyPolicy, typesafeThought } from './jev/typesafe.js';
 import { confetti } from './ui/confetti.js';
 import { sound } from './ui/sound.js';
 import { scoreboard } from './ui/score.js';
@@ -24,7 +25,7 @@ document.querySelector('#app').innerHTML = `
   <section class="player-card jev" id="jevCard">
     <div class="avatar">J</div>
     <div class="meta">
-      <div class="name">Jev <span class="level" id="jevLevel">Pro</span></div>
+      <div class="name">Jev <span class="level" id="jevLevel">Pro</span><span class="source" id="jevSource"></span></div>
       <div class="captured" id="capJev"></div>
     </div>
     <div class="thought" id="thought">Ready when you are.</div>
@@ -119,8 +120,15 @@ const state = {
 };
 
 const world = new World($('#stage'), { onSquareTap });
+// Local search engine: offline fallback, and the verifier for Legendary.
 const worker = new Worker(new URL('./jev/worker.js', import.meta.url), { type: 'module' });
-worker.onmessage = onJevMove;
+const pending = new Map();
+worker.onmessage = ({ data }) => { pending.get(data.id)?.(data.result); pending.delete(data.id); };
+let workerSeq = 0;
+function localThink(payload) {
+  const id = ++workerSeq;
+  return new Promise((resolve) => { pending.set(id, resolve); worker.postMessage({ id, ...payload }); });
+}
 if (import.meta.env.DEV) window.__jev = { world, chess, state };
 
 // ---------- Input ----------
@@ -192,23 +200,52 @@ function afterMove(m) {
   renderPanels();
 }
 
-function askJev() {
+async function askJev() {
   state.busy = true;
   const id = ++state.thinkId;
   setThinking(true);
-  state.thinkStart = performance.now();
-  worker.postMessage({ id, fen: chess.fen(), history: chess.history(), level: state.level, past: state.fens.slice(-40) });
-}
+  const t0 = performance.now();
+  const fen = chess.fen();
+  const history = chess.history();
+  const local = { fen, history, level: state.level, past: state.fens.slice(-40) };
 
-async function onJevMove({ data }) {
-  if (data.id !== state.thinkId || state.over) return;
-  const { result } = data;
-  if (!result) return;
+  let result;
+  if (await typesafeEnabled()) {
+    try {
+      const data = await askTypeSafeJev(fen, history);
+      if (id !== state.thinkId) return;
+      const { pick, candidates } = applyPolicy(data.ranked, state.level);
+      let chosen = pick;
+      let note = `TypeSafe ${data.model || 'Jev'} · ${data.ms} ms`;
+      if (candidates) {
+        const verified = await localThink({ ...local, candidates });
+        chosen = data.ranked.find((m) => verified && m.from === verified.move.from && m.to === verified.move.to && (m.promotion || undefined) === (verified.move.promotion || undefined)) || pick;
+        note += ` · ${candidates.length} candidates verified`;
+      }
+      result = {
+        move: { from: chosen.from, to: chosen.to, promotion: chosen.promotion },
+        thought: typesafeThought(chosen, data),
+        note,
+        source: 'typesafe',
+      };
+    } catch (e) {
+      console.warn('[jev] TypeSafe Jev unavailable, using local engine:', e);
+      toast('TypeSafe Jev unreachable — local engine is playing');
+    }
+  }
+  if (!result) {
+    const r = await localThink(local);
+    if (!r) return;
+    const stats = r.book ? 'opening book' : r.depth ? `depth ${r.depth} · ${fmt(r.nodes)} positions` : '';
+    result = { move: r.move, thought: r.thought, note: `Local engine${stats ? ' · ' + stats : ''}`, source: 'local' };
+  }
+  if (id !== state.thinkId || state.over) return;
+  setSource(result.source);
+
   // Don't move instantly — feel like a person across the board.
-  const minDelay = state.level === 'legendary' ? 350 : 650;
-  const wait = minDelay - (performance.now() - state.thinkStart);
+  const wait = 600 - (performance.now() - t0);
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-  if (data.id !== state.thinkId) return;
+  if (id !== state.thinkId) return;
 
   state.fens.push(chess.fen());
   const m = chess.move(result.move);
@@ -219,13 +256,19 @@ async function onJevMove({ data }) {
   checkGameOver();
 }
 
+function setSource(src) {
+  const el = $('#jevSource');
+  el.textContent = src === 'typesafe' ? 'TypeSafe' : 'Local';
+  el.dataset.src = src;
+  el.title = src === 'typesafe' ? 'Moves chosen by TypeSafe Jev' : 'TypeSafe Jev not configured — local engine fallback';
+}
+
 function setThinking(on, result) {
   $('#jevCard').classList.toggle('thinking', on);
   const t = $('#thought');
   if (on) t.innerHTML = '<span class="dots"><i></i><i></i><i></i></span>';
   else if (result) {
-    const stats = result.book ? 'opening book' : result.depth ? `depth ${result.depth} · ${fmt(result.nodes)} positions` : '';
-    t.innerHTML = `${escapeHtml(result.thought)}${stats ? `<small>${stats}</small>` : ''}`;
+    t.innerHTML = `${escapeHtml(result.thought)}${result.note ? `<small>${escapeHtml(result.note)}</small>` : ''}`;
   }
 }
 
@@ -411,6 +454,7 @@ for (const m of document.querySelectorAll('.modal')) {
 }
 
 // Boot
+typesafeEnabled().then((on) => setSource(on ? 'typesafe' : 'local'));
 world.setPosition(chess.board());
 renderScore();
 renderPanels();

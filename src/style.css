@@ -181,3 +181,8 @@ button:disabled { opacity: 0.35; cursor: default; }
   .player-card.you { bottom: 12px; left: 12px; }
   .toolbar { left: auto; right: 12px; transform: none; width: auto; flex-direction: column; bottom: 12px; top: 56px; }
 }
+
+.source { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; padding: 2px 6px;
+  border-radius: 6px; border: 1px solid var(--line); color: var(--muted); }
+.source:empty { display: none; }
+.source[data-src='typesafe'] { color: #c9a7ff; border-color: rgba(201, 167, 255, 0.35); background: rgba(201, 167, 255, 0.1); }

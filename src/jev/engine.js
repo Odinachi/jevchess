@@ -182,9 +182,11 @@ export class Jev {
    * @param {string[]} sanHistory moves played so far (for the opening book)
    * @param {'beginner'|'pro'|'legendary'} level
    * @param {string[]} [pastFens] earlier positions, for repetition detection
+   * @param {string[]} [candidates] UCI moves to restrict the search to (used to verify
+   *   TypeSafe Jev's shortlist); disables the book and randomness.
    */
-  think(fen, sanHistory, level = 'pro', pastFens = []) {
-    const cfg = LEVELS[level] || LEVELS.pro;
+  think(fen, sanHistory, level = 'pro', pastFens = [], candidates = null) {
+    const cfg = candidates ? { ...LEVELS.legendary, timeMs: 1500, book: false } : LEVELS[level] || LEVELS.pro;
     const chess = new Chess(fen);
     const legal = chess.moves({ verbose: true });
     if (!legal.length) return null;
@@ -192,7 +194,7 @@ export class Jev {
 
     const key = sanHistory.join(' ');
     const bookMoves = (BOOK[key] || []).filter((san) => legal.some((m) => m.san === san));
-    if (bookMoves.length && cfg.book) {
+    if (bookMoves.length && cfg.book && !candidates) {
       const san = bookMoves[Math.floor(Math.random() * bookMoves.length)];
       const m = legal.find((x) => x.san === san);
       return { move: { from: m.from, to: m.to, promotion: m.promotion }, san, score: 0, depth: 0, nodes: 0, book: true, thought: 'Book move — known theory.' };
@@ -211,6 +213,12 @@ export class Jev {
     this.history.fill(0);
 
     let root = bd.gen().filter((m) => bd.make(m) && (bd.unmake(), true)).map((m) => ({ m, score: 0 }));
+    if (candidates?.length) {
+      const allowed = new Set(candidates);
+      const uci = (m) => { const u = toUci(m); return u.from + u.to + (u.promotion || ''); };
+      const narrowed = root.filter((r) => allowed.has(uci(r.m)));
+      if (narrowed.length) root = narrowed;
+    }
     let best = root[0];
     let depthDone = 0;
 

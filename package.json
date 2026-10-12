@@ -10,12 +10,13 @@
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
+    "@typesafe-ai/sdk": "^0.6.0",
     "chess.js": "^1.0.0",
     "three": "^0.169.0"
   },
   "devDependencies": {
     "vite": "^5.4.10"
   },
-  "description": "JevChess \u2014 realistic, mobile-friendly 3D chess in the browser against the Jev decision model.",
+  "description": "JevChess — realistic, mobile-friendly 3D chess in the browser against the Jev decision model.",
   "license": "MIT"
 }
