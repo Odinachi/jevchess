@@ -19,7 +19,7 @@ All 3D assets are generated in code — nothing to download.
 npm install
 cp .env.example .env.local   # add your TYPESAFE_API_KEY (optional)
 npm run dev                  # http://localhost:5173
-npm test                     # 82 tests, no API key or network needed
+npm test                     # 94 tests, no API key or network needed
 npm run build
 ```
 
@@ -39,13 +39,13 @@ browser ──POST /api/jev {fen, history}──▶ server/typesafe-jev.js ─�
 - The server validates the FEN with chess.js and drops any label that isn't a legal move. The page also checks the move before playing it.
 - A simple per-IP rate limit protects the key on public deployments.
 
-Difficulty is applied to Jev's probability distribution ([`src/jev/typesafe.js`](src/jev/typesafe.js)):
+**Jev always considers your replies before it moves.** TypeSafe Jev proposes moves, giving each legal move a probability. The search then plays out each move and your best answers to it, several moves deep, before Jev commits ([`src/jev/engine.js`](src/jev/engine.js)). Jev's probabilities act as a *prior*: they decide between moves of similar value, but they can never talk Jev into a move your reply refutes. When it rejects its first instinct, Jev says so ("Not Qh5 — you'd answer Nxh5"). Otherwise it names the reply it expects.
 
-| Level | Policy |
-| --- | --- |
-| Beginner | Samples from Jev's top moves with a high temperature (flattened distribution) |
-| Pro | Plays Jev's top `choice` |
-| Legendary | Shortlists Jev's most probable moves, plus any mate. The local search verifies the shortlist and plays the best move from it. This follows the [confidence-gated routing](https://docs.typesafe.ai/patterns/confidence-routing) pattern. |
+| Level | Looks ahead | Variety | Never plays a move worse than the best by |
+| --- | --- | --- | --- |
+| Beginner | 2 plies (its move + your reply) + captures | Picks among moves within ~1 pawn of the best | 1.5 pawns |
+| Pro | up to 5 plies, ~1 s | Small; prefers TypeSafe Jev's favourite among near-equal moves | 0.5 pawns |
+| Legendary | iterative deepening, ~3 s | None, always the best move | 0 |
 
 If the API is unreachable or times out, the game falls back to the local engine and shows a notice.
 
@@ -69,15 +69,16 @@ It lives in [`src/jev/`](src/jev) and runs in a Web Worker so the UI never freez
 | `board.js` | Fast 0x88 board with make/unmake and Zobrist hashing (perft‑verified, ~1–5M nodes/s) |
 | `engine.js` | Evaluation (material, piece‑square tables, tapered king safety, bishop pair, pawn structure) and search: iterative deepening alpha‑beta with PVS, transposition table, null‑move pruning, late‑move reductions, quiescence, MVV‑LVA / killer / history move ordering, repetition detection, small opening book |
 | `worker.js` | Thin worker wrapper |
-| `typesafe.js` | Browser client for `/api/jev` and the difficulty policy |
+| `typesafe.js` | Browser client for `/api/jev`; turns Jev's ranking into priors for the search |
 
-When it plays on its own (no key), difficulty is a mix of search depth/time and "human" variety:
+Without a TypeSafe key the same levels apply, just with no prior. This is a blunder benchmark on 60 middlegame positions, counting moves that lose 2+ pawns of value against the best reply. "TypeSafe (worst case)" means TypeSafe's #1 pick is an arbitrary legal move:
 
-| Level | Search | Style |
-| --- | --- | --- |
-| Beginner | 1 ply + quiescence | Picks loosely among decent moves, sometimes plays on a hunch |
-| Pro | up to 5 plies, ~0.9 s | Small variety among near‑best moves, uses the opening book |
-| Legendary | iterative deepening, ~3 s | Always plays its best move |
+| | Beginner | Pro | Legendary |
+| --- | --- | --- | --- |
+| TypeSafe (worst case), before look-ahead | 50.6% | 48.9% | 16.7% |
+| TypeSafe (worst case), now | 5.6% | 1.7% | 0% |
+| Local engine, before | 18.9% | 1.7% | 0% |
+| Local engine, now | 5.0% | 1.7% | 0% |
 
 [chess.js](https://github.com/jhlywa/chess.js) is the source of truth for game rules and notation; Jev's own board is only used for speed inside the search.
 
@@ -106,7 +107,8 @@ test/              node:test suites (see below)
 | `engine.test.js` | Perft move-generation counts on 5 standard positions, plus mate finding |
 | `engine-edge.test.js` | Make/unmake + hash round-trips, castling through/out of check, pinned en passant, mate vs stalemate, only-move positions, repetition draws, shortlist verification |
 | `server.test.js` | Missing key, bad input, mated/stalemated positions, check evasions, special-move descriptions, the 218-move position, hallucinated or partial answers, upstream errors and retries, rate limiting |
-| `client.test.js` | Difficulty policies at the edges, commentary text, `/api/jev` client errors and timeouts |
+| `lookahead.test.js` | Jev never walks into a refutation, at every level, even when TypeSafe ranks the blunder first; it explains rejected moves |
+| `client.test.js` | Prior conversion edge cases, `/api/jev` client errors and timeouts |
 | `score.test.js` | Score persistence, history cap, corrupted data, private-mode storage |
 | `typesafe.test.js` | End-to-end request shape sent to TypeSafe |
 

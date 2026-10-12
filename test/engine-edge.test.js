@@ -116,35 +116,31 @@ test('a losing side heads for a repetition draw', () => {
   assert.equal(r.score, 0);
 });
 
-// ---------- candidate restriction (Legendary verification of TypeSafe's shortlist) ----------
+// ---------- TypeSafe priors ----------
 
-test('candidate search only plays from the shortlist', () => {
-  const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-  for (let i = 0; i < 3; i++) {
-    const r = jev.think(fen, [], 'legendary', [], ['a2a3', 'h2h3']);
-    assert.ok(['a2a3', 'h2h3'].includes(r.move.from + r.move.to));
-    assert.equal(r.book, false, 'book disabled when verifying');
-  }
+test('a prior decides between equally good moves', () => {
+  // Symmetric pawns: a3 and h3 score the same, so Jev's preference decides.
+  const fen = '4k3/p6p/8/8/8/8/P6P/4K3 w - - 0 1';
+  for (let i = 0; i < 8; i++) assert.equal(jev.think(fen, ['-'], 'pro', [], { h2h3: 0.9, a2a3: 0.01 }).san, 'h3');
+  for (let i = 0; i < 8; i++) assert.equal(jev.think(fen, ['-'], 'pro', [], { a2a3: 0.9, h2h3: 0.01 }).san, 'a3');
 });
 
-test('candidate search picks the mate from the shortlist', () => {
+test('priors disable the opening book (TypeSafe Jev chooses openings)', () => {
+  const r = jev.think('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', [], 'pro', [], { g1f3: 1 });
+  assert.equal(r.book, false);
+});
+
+test('a prior never overrides a mate', () => {
   const fen = '6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1';
-  assert.equal(jev.think(fen, ['-'], 'legendary', [], ['g1f1', 'd1d8', 'h2h3']).san, 'Rd8#');
+  for (const level of ['pro', 'legendary']) assert.equal(jev.think(fen, ['-'], level, [], { g1f1: 0.99, d1d8: 0.001 }).san, 'Rd8#');
 });
 
-test('candidate search rejects a blunder in the shortlist', () => {
-  const fen = 'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5Q2/PPPP1PPP/RNB1K1NR w KQkq - 2 3';
-  assert.equal(jev.think(fen, ['-'], 'legendary', [], ['f3f7', 'f3g4']).san, 'Qxf7#');
-});
-
-test('illegal or unknown candidates fall back to the full move list', () => {
+test('unknown or illegal prior keys are ignored', () => {
   const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-  const r = jev.think(fen, [], 'legendary', [], ['e2e5', 'z9z9']);
-  assert.ok(legalIn(fen, r.move));
+  assert.ok(legalIn(fen, jev.think(fen, [], 'legendary', [], { e2e5: 1, z9z9: 1 }).move));
 });
 
-test('a promotion candidate keeps its piece suffix', () => {
-  const fen = '8/1P6/8/8/8/8/k7/4K3 w - - 0 1';
-  const r = jev.think(fen, ['-'], 'legendary', [], ['b7b8n']);
-  assert.deepEqual([r.move.from, r.move.to, r.move.promotion], ['b7', 'b8', 'n']);
+test('empty priors behave like no priors', () => {
+  const fen = '6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1';
+  assert.equal(jev.think(fen, ['-'], 'pro', [], {}).san, 'Rd8#');
 });

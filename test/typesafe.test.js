@@ -1,6 +1,5 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyPolicy } from '../src/jev/typesafe.js';
 
 // Mock the TypeSafe HTTP API so tests run without a key or network.
 let lastRequest = null;
@@ -47,26 +46,4 @@ test('POST rejects bad input without calling the API', async () => {
   assert.equal(lastRequest, null);
 });
 
-const ranked = [
-  { uci: 'e2e4', san: 'e4', p: 0.5 },
-  { uci: 'd2d4', san: 'd4', p: 0.3 },
-  { uci: 'g1f3', san: 'Nf3', p: 0.15 },
-  { uci: 'c2c4', san: 'c4', p: 0.04 },
-  { uci: 'h5f7', san: 'Qxf7#', p: 0.01 },
-];
-
-test('pro plays Jev’s top choice', () => {
-  assert.equal(applyPolicy(ranked, 'pro').pick.uci, 'e2e4');
-});
-
-test('beginner samples from Jev’s distribution', () => {
-  const picks = new Set();
-  for (let i = 0; i < 200; i++) picks.add(applyPolicy(ranked, 'beginner').pick.uci);
-  assert.ok(picks.size >= 3);
-});
-
-test('legendary shortlists probable moves and never drops a mate', () => {
-  const { candidates } = applyPolicy(ranked, 'legendary');
-  assert.deepEqual(candidates.slice(0, 3), ['e2e4', 'd2d4', 'g1f3']);
-  assert.ok(candidates.includes('h5f7'));
-});
+// Move choice (priors + look-ahead) is covered in lookahead.test.js and engine-edge.test.js.

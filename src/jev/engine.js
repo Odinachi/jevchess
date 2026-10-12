@@ -108,10 +108,16 @@ const BOOK = {
   'Nf3 Nf6': ['c4', 'g3'],
 };
 
+// Every level looks ahead at the opponent's replies; levels differ in how deep,
+// how much variety they allow among safe moves, and how much they trust Jev's prior.
+//   depth/timeMs  how far the search looks (each ply = one move by either side)
+//   noise         pick among moves within this many centipawns of the best…
+//   maxLoss       …but never one that loses more than this versus the best move
+//   priorWeight   max bonus (cp) for the move TypeSafe Jev likes most
 export const LEVELS = {
-  beginner: { name: 'Beginner', depth: 1, timeMs: 250, noise: 180, blunder: 0.25, book: false },
-  pro: { name: 'Pro', depth: 5, timeMs: 900, noise: 20, blunder: 0, book: true },
-  legendary: { name: 'Legendary', depth: 64, timeMs: 3000, noise: 0, blunder: 0, book: true },
+  beginner: { name: 'Beginner', depth: 2, timeMs: 400, noise: 110, maxLoss: 150, priorWeight: 90, book: false },
+  pro: { name: 'Pro', depth: 5, timeMs: 1000, noise: 20, maxLoss: 50, priorWeight: 35, book: true },
+  legendary: { name: 'Legendary', depth: 64, timeMs: 3000, noise: 0, maxLoss: 0, priorWeight: 12, book: true },
 };
 
 const TYPE = [0, 'p', 'n', 'b', 'r', 'q', 'k'];
@@ -178,54 +184,94 @@ export class Jev {
   }
 
   /**
+   * Choose a move. The search plays out each candidate and the opponent's best
+   * replies before deciding, so Jev doesn't walk into one-move refutations.
    * @param {string} fen current position
    * @param {string[]} sanHistory moves played so far (for the opening book)
    * @param {'beginner'|'pro'|'legendary'} level
    * @param {string[]} [pastFens] earlier positions, for repetition detection
-   * @param {string[]} [candidates] UCI moves to restrict the search to (used to verify
-   *   TypeSafe Jev's shortlist); disables the book and randomness.
+   * @param {Record<string, number>} [priors] TypeSafe Jev's probability per UCI move.
+   *   Used to break ties between moves of similar value, never to accept a blunder.
    */
-  think(fen, sanHistory, level = 'pro', pastFens = [], candidates = null) {
-    const cfg = candidates ? { ...LEVELS.legendary, timeMs: 1500, book: false } : LEVELS[level] || LEVELS.pro;
+  think(fen, sanHistory, level = 'pro', pastFens = [], priors = null) {
+    const cfg = LEVELS[level] || LEVELS.pro;
     const chess = new Chess(fen);
     const legal = chess.moves({ verbose: true });
     if (!legal.length) return null;
     const toSan = (u) => legal.find((x) => x.from === u.from && x.to === u.to && (x.promotion || undefined) === u.promotion)?.san;
+    const hasPriors = priors && Object.keys(priors).length > 0;
 
     const key = sanHistory.join(' ');
     const bookMoves = (BOOK[key] || []).filter((san) => legal.some((m) => m.san === san));
-    if (bookMoves.length && cfg.book && !candidates) {
+    if (bookMoves.length && cfg.book && !hasPriors) {
       const san = bookMoves[Math.floor(Math.random() * bookMoves.length)];
       const m = legal.find((x) => x.san === san);
       return { move: { from: m.from, to: m.to, promotion: m.promotion }, san, score: 0, depth: 0, nodes: 0, book: true, thought: 'Book move — known theory.' };
     }
-    if (Math.random() < cfg.blunder) {
-      const m = legal[Math.floor(Math.random() * legal.length)];
-      return { move: { from: m.from, to: m.to, promotion: m.promotion }, san: m.san, score: 0, depth: 0, nodes: 0, book: false, thought: 'Following a hunch…' };
-    }
 
     const bd = new Board(fen);
     this.bd = bd;
+    const root = this.analyse(bd, cfg, pastFens, cfg.noise + cfg.maxLoss + cfg.priorWeight);
+    const uciOf = (m) => { const u = toUci(m); return u.from + u.to + (u.promotion || ''); };
+
+    // Jev's prior: a bonus of up to priorWeight for the moves TypeSafe Jev prefers.
+    const pMax = hasPriors ? Math.max(...root.map((r) => priors[uciOf(r.m)] || 0)) || 1 : 1;
+    for (const r of root) {
+      r.prior = hasPriors ? (priors[uciOf(r.m)] || 0) / pMax : 0;
+      r.adj = r.score + cfg.priorWeight * r.prior;
+    }
+    const best = root[0]; // highest raw score
+    let choice = best;
+    if (Math.abs(best.score) < MATE - 200) {
+      // Safe moves only, then the best "adjusted" (score + prior) and variety within noise.
+      const safe = root.filter((r) => r.score >= best.score - cfg.maxLoss);
+      const top = safe.reduce((a, r) => (r.adj > a.adj ? r : a), safe[0]);
+      const pool = safe.filter((r) => r.adj >= top.adj - cfg.noise);
+      choice = pool.length > 1 ? this.pickWeighted(pool, hasPriors) : top;
+    }
+
+    const move = toUci(choice.m);
+    const san = toSan(move);
+    const reply = this.expectedReply(bd, chess, choice.m)?.san || null;
+
+    // If TypeSafe Jev's favourite was rejected because a reply refutes it, say so.
+    // (Its search score is only a bound, so measure it properly via its best reply.)
+    let rejected = null;
+    if (hasPriors) {
+      const fav = root.reduce((a, r) => (r.prior > a.prior ? r : a), root[0]);
+      if (fav !== choice) {
+        const refute = this.expectedReply(bd, chess, fav.m);
+        const favScore = Math.min(fav.score, refute ? refute.score : fav.score);
+        if (refute && favScore < choice.score - 100) {
+          rejected = { san: toSan(toUci(fav.m)), reply: refute.san, loss: choice.score - favScore };
+        }
+      }
+    }
+    return {
+      move, san, score: choice.score, depth: this.depthDone, nodes: this.nodes, book: false,
+      reply, rejected, considered: root.length,
+      thought: describe(san, choice.score, reply, rejected),
+    };
+  }
+
+  /**
+   * Scores every legal move by searching the replies to it. Moves within `window`
+   * of the best get exact scores; the rest are only known to be worse.
+   * @returns {Array<{m:number, score:number}>} sorted best first
+   */
+  analyse(bd, cfg, pastFens = [], window = 0) {
     this.past = pastFens.map((f) => new Board(f).hash);
     this.nodes = 0;
     this.deadline = performance.now() + cfg.timeMs;
     this.killers = Array.from({ length: 128 }, () => [0, 0]);
     this.history.fill(0);
+    this.depthDone = 0;
 
-    let root = bd.gen().filter((m) => bd.make(m) && (bd.unmake(), true)).map((m) => ({ m, score: 0 }));
-    if (candidates?.length) {
-      const allowed = new Set(candidates);
-      const uci = (m) => { const u = toUci(m); return u.from + u.to + (u.promotion || ''); };
-      const narrowed = root.filter((r) => allowed.has(uci(r.m)));
-      if (narrowed.length) root = narrowed;
-    }
-    let best = root[0];
-    let depthDone = 0;
-
+    const root = bd.gen().filter((m) => bd.make(m) && (bd.unmake(), true)).map((m) => ({ m, score: 0 }));
     for (let depth = 1; depth <= cfg.depth; depth++) {
+      const prev = root.map((r) => r.score);
       try {
         let alpha = -MATE - 1;
-        const window = cfg.noise;
         for (const r of root) {
           bd.make(r.m);
           r.score = this.repeated() ? 0 : -this.search(depth - 1, -MATE - 1, -(alpha - window), 1, true);
@@ -233,28 +279,58 @@ export class Jev {
           if (r.score > alpha) alpha = r.score;
         }
         root.sort((a, b) => b.score - a.score);
-        best = root[0];
-        depthDone = depth;
-        if (Math.abs(best.score) > MATE - 200) break;
+        this.depthDone = depth;
+        if (Math.abs(root[0].score) > MATE - 200) break;
         if (performance.now() > this.deadline - cfg.timeMs * 0.45 && depth >= 2) break; // next ply won't finish
       } catch (e) {
         if (!(e instanceof TimeUp)) throw e;
-        // Partial iteration: keep previous ordering but trust a move that beat it.
+        // Unfinished iteration: fall back to the last complete one.
+        root.forEach((r, i) => { r.score = prev[i]; });
         root.sort((a, b) => b.score - a.score);
         break;
       }
     }
+    return root;
+  }
 
-    let choice = best;
-    // Human-like variety: pick among moves scoring within `noise` of the best.
-    // Strict > excludes moves that merely failed low against the window bound.
-    if (cfg.noise > 0 && (best.score < MATE - 200 || level === 'beginner')) {
-      const pool = root.filter((x) => x.score > best.score - cfg.noise);
-      choice = pool[Math.floor(Math.random() * pool.length)];
+  /**
+   * The opponent's best answer to `m`, found with a short dedicated search of every reply.
+   * @returns {{ san: string, score: number } | null} score is from the mover's point of view
+   */
+  expectedReply(bd, chess, m) {
+    if (!bd.make(m)) return null;
+    let best = null, bestScore = -Infinity;
+    this.deadline = performance.now() + 120;
+    try {
+      for (let depth = 1; depth <= 3; depth++) {
+        let iterBest = null, iterScore = -Infinity;
+        for (const r of bd.gen()) {
+          if (!bd.make(r)) continue;
+          const s = -this.search(depth - 1, -MATE - 1, MATE + 1, 2, false);
+          bd.unmake();
+          if (s > iterScore) { iterScore = s; iterBest = r; }
+        }
+        best = iterBest; bestScore = iterScore;
+        if (bestScore > MATE - 200) break;
+      }
+    } catch (e) {
+      if (!(e instanceof TimeUp)) { bd.unmake(); throw e; }
     }
-    const move = toUci(choice.m);
-    const san = toSan(move);
-    return { move, san, score: choice.score, depth: depthDone, nodes: this.nodes, book: false, thought: describe(san, choice.score) };
+    bd.unmake();
+    if (!best) return null;
+    try {
+      const c = new Chess(chess.fen());
+      c.move(toUci(m));
+      const san = c.move(toUci(best))?.san;
+      return san ? { san, score: -bestScore } : null;
+    } catch { return null; }
+  }
+
+  pickWeighted(pool, byPrior) {
+    const w = pool.map((r) => (byPrior ? 0.15 + r.prior : 1));
+    let x = Math.random() * w.reduce((a, b) => a + b, 0);
+    for (let i = 0; i < pool.length; i++) if ((x -= w[i]) <= 0) return pool[i];
+    return pool[0];
   }
 
   repeated() {
@@ -392,15 +468,19 @@ export class Jev {
   }
 }
 
-function describe(san, score) {
+function describe(san, score, reply, rejected) {
   if (!san) return '';
   if (san.includes('#')) return 'Checkmate.';
-  if (score > MATE - 200) return `I see mate in ${Math.ceil((MATE - score) / 2)}. ${san}.`;
-  if (score < -MATE + 200) return `Desperate defence: ${san}.`;
-  if (san.includes('x')) return `Taking material with ${san}.`;
-  if (san.includes('+')) return `Pressure on the king: ${san}.`;
-  if (san.startsWith('O-O')) return 'Tucking the king away.';
-  if (score > 150) return `I like my position (+${(score / 100).toFixed(1)}).`;
-  if (score < -150) return `Fighting back (${(score / 100).toFixed(1)}).`;
-  return `Improving with ${san}.`;
+  let line;
+  if (score > MATE - 200) line = `I see mate in ${Math.ceil((MATE - score) / 2)}. ${san}.`;
+  else if (score < -MATE + 200) line = `Desperate defence: ${san}.`;
+  else if (rejected?.san && rejected.reply) line = `Not ${rejected.san} \u2014 you'd answer ${rejected.reply}. ${san} instead.`;
+  else if (san.includes('x')) line = `Taking material with ${san}.`;
+  else if (san.includes('+')) line = `Pressure on the king: ${san}.`;
+  else if (san.startsWith('O-O')) line = 'Tucking the king away.';
+  else if (score > 150) line = `I like my position (+${(score / 100).toFixed(1)}).`;
+  else if (score < -150) line = `Fighting back (${(score / 100).toFixed(1)}).`;
+  else line = `Improving with ${san}.`;
+  if (reply && !rejected) line += ` Expecting ${reply}.`;
+  return line;
 }

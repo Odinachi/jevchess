@@ -2,7 +2,7 @@ import './style.css';
 import { Chess } from 'chess.js';
 import { World } from './scene/world.js';
 import { LEVELS } from './jev/engine.js';
-import { typesafeEnabled, askTypeSafeJev, applyPolicy, typesafeThought } from './jev/typesafe.js';
+import { typesafeEnabled, askTypeSafeJev, toPriors } from './jev/typesafe.js';
 import { confetti } from './ui/confetti.js';
 import { sound } from './ui/sound.js';
 import { scoreboard } from './ui/score.js';
@@ -217,36 +217,27 @@ async function askJev() {
   const history = chess.history();
   const local = { fen, history, level: state.level, past: state.fens.slice(-40) };
 
-  let result;
+  // TypeSafe Jev proposes (a probability per legal move); the search then plays out
+  // your replies to each move before Jev commits, so it doesn't walk into refutations.
+  let priors = null;
+  let source = 'local';
+  let note = '';
   if (await typesafeEnabled()) {
     try {
       const data = await askTypeSafeJev(fen, history);
       if (id !== state.thinkId) return;
-      const { pick, candidates } = applyPolicy(data.ranked, state.level);
-      let chosen = pick;
-      let note = `TypeSafe ${data.model || 'Jev'} · ${data.ms} ms`;
-      if (candidates) {
-        const verified = await localThink({ ...local, candidates });
-        chosen = data.ranked.find((m) => verified && m.from === verified.move.from && m.to === verified.move.to && (m.promotion || undefined) === (verified.move.promotion || undefined)) || pick;
-        note += ` · ${candidates.length} candidates verified`;
-      }
-      result = {
-        move: { from: chosen.from, to: chosen.to, promotion: chosen.promotion },
-        thought: typesafeThought(chosen, data),
-        note,
-        source: 'typesafe',
-      };
+      priors = toPriors(data.ranked);
+      source = 'typesafe';
+      note = `TypeSafe ${data.model || 'Jev'} \u00b7 ${data.ms} ms \u00b7 `;
     } catch (e) {
       console.warn('[jev] TypeSafe Jev unavailable, using local engine:', e);
-      toast('TypeSafe Jev unreachable — local engine is playing');
+      toast('TypeSafe Jev unreachable \u2014 local engine is playing');
     }
   }
-  if (!result) {
-    const r = await localThink(local);
-    if (!r) return;
-    const stats = r.book ? 'opening book' : r.depth ? `depth ${r.depth} · ${fmt(r.nodes)} positions` : '';
-    result = { move: r.move, thought: r.thought, note: `Local engine${stats ? ' · ' + stats : ''}`, source: 'local' };
-  }
+  const r = await localThink({ ...local, priors });
+  if (!r) return;
+  note += r.book ? 'opening book' : `checked your replies \u00b7 depth ${r.depth} \u00b7 ${fmt(r.nodes)} positions`;
+  const result = { move: r.move, thought: r.thought, note, source };
   if (id !== state.thinkId || state.over) return;
   setSource(result.source);
 
