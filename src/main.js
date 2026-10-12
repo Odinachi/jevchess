@@ -121,6 +121,7 @@ const state = {
 const world = new World($('#stage'), { onSquareTap });
 const worker = new Worker(new URL('./jev/worker.js', import.meta.url), { type: 'module' });
 worker.onmessage = onJevMove;
+if (import.meta.env.DEV) window.__jev = { world, chess, state };
 
 // ---------- Input ----------
 function onSquareTap(sq) {

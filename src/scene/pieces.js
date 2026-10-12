@@ -105,7 +105,7 @@ function geom(key, build) {
 
 export function createMaterials() {
   const white = new THREE.MeshPhysicalMaterial({
-    color: 0xf1e7d0, roughness: 0.32, metalness: 0, clearcoat: 0.7, clearcoatRoughness: 0.18, sheen: 0.3, sheenColor: 0xffffff,
+    color: 0xdccdaa, roughness: 0.42, metalness: 0, clearcoat: 0.5, clearcoatRoughness: 0.25,
   });
   const black = new THREE.MeshPhysicalMaterial({
     color: 0x1a1513, roughness: 0.28, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.08,

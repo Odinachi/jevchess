@@ -57,7 +57,7 @@ export class World {
     this.controls = controls;
 
     // Lighting: warm key with soft shadows, cool fill, gentle overhead.
-    const key = new THREE.DirectionalLight(0xfff1dc, 2.4);
+    const key = new THREE.DirectionalLight(0xfff1dc, 2.0);
     key.position.set(-6, 14, 7);
     key.castShadow = true;
     key.shadow.mapSize.set(isTouch ? 1024 : 2048, isTouch ? 1024 : 2048);
@@ -71,7 +71,7 @@ export class World {
     fill.position.set(8, 6, -6);
     scene.add(fill);
     scene.add(new THREE.HemisphereLight(0xfff4e6, 0x1a120c, 0.35));
-    const spot = new THREE.SpotLight(0xffe2b8, 40, 30, 0.6, 0.6, 1.6);
+    const spot = new THREE.SpotLight(0xffe2b8, 25, 30, 0.6, 0.6, 1.6);
     spot.position.set(0, 13, 0);
     spot.target.position.set(0, 0, 0);
     scene.add(spot, spot.target);
@@ -200,10 +200,12 @@ export class World {
     // Fit the whole board horizontally on narrow (portrait) screens.
     const vFov = THREE.MathUtils.degToRad(this.camera.fov);
     const hFov = 2 * Math.atan(Math.tan(vFov / 2) * this.camera.aspect);
-    const need = BOARD_SIZE * 0.62 / Math.tan(Math.min(hFov, vFov * 1.05) / 2);
+    const need = BOARD_SIZE * 0.56 / Math.tan(Math.min(hFov, vFov * 1.05) / 2);
     this.fitDistance = Math.max(11.5, need);
     this.controls.minDistance = this.fitDistance * 0.55;
     this.controls.maxDistance = this.fitDistance * 1.6;
+    this.scene.fog.near = this.fitDistance * 1.4;
+    this.scene.fog.far = this.fitDistance * 3.2;
     this.camera.updateProjectionMatrix();
   }
 
