@@ -40,7 +40,7 @@ button:disabled { opacity: 0.35; cursor: default; }
 .score-pill b { color: var(--text); font-size: 16px; }
 .score-pill .sep { opacity: 0.5; }
 .score-pill .draws { padding-left: 8px; border-left: 1px solid var(--line); font-size: 13px; }
-.icon-btn { width: 36px; height: 36px; border-radius: 50%; background: var(--panel); border: 1px solid var(--line);
+.icon-btn { display: grid; place-items: center; color: var(--text); text-decoration: none; width: 36px; height: 36px; border-radius: 50%; background: var(--panel); border: 1px solid var(--line);
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); font-size: 16px; }
 .icon-btn.small { width: 28px; height: 28px; font-size: 13px; }
 
@@ -185,3 +185,8 @@ button:disabled { opacity: 0.35; cursor: default; }
   border-radius: 6px; border: 1px solid var(--line); color: var(--muted); }
 .source:empty { display: none; }
 .source[data-src='typesafe'] { color: #c9a7ff; border-color: rgba(201, 167, 255, 0.35); background: rgba(201, 167, 255, 0.1); }
+
+.github-cta { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 14px; padding-top: 14px;
+  border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; text-decoration: none; }
+.github-cta:hover, .github-cta:focus-visible { color: var(--text); }
+.github-cta svg { flex: none; }

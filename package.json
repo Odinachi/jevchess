@@ -21,6 +21,14 @@
     "jpeg-js": "^0.4.4",
     "vite": "^5.4.10"
   },
-  "description": "JevChess — realistic, mobile-friendly 3D chess in the browser against the Jev decision model.",
-  "license": "MIT"
+  "description": "JevChess \u2014 realistic, mobile-friendly 3D chess in the browser against the Jev decision model.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Odinachi/jevchess.git"
+  },
+  "homepage": "https://github.com/Odinachi/jevchess#readme",
+  "bugs": {
+    "url": "https://github.com/Odinachi/jevchess/issues"
+  }
 }
